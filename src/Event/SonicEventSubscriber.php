@@ -8,6 +8,7 @@ use Flarum\Post\Event\Restored;
 use Flarum\Post\Event\Revised;
 use Illuminate\Contracts\Events\Dispatcher;
 use Flarum\Settings\SettingsRepositoryInterface;
+use GaNuongLaChanh\Sonic\Support\SearchTextNormalizer;
 
 class SonicEventSubscriber
 {
@@ -50,8 +51,12 @@ class SonicEventSubscriber
     {
         if ($event->post->type === "comment") {
             try {
+                $content = SearchTextNormalizer::normalize(strip_tags($event->post->content));
+                if ($content === '') {
+                    return;
+                }
                 $this->ingest->connect($this->password);
-                $this->ingest->push('postCollection', 'flarumBucket', $event->post->id, strip_tags($event->post->content), $this->locale);
+                $this->ingest->push('postCollection', 'flarumBucket', $event->post->id, $content, $this->locale);
                 $this->ingest->disconnect();
             } catch (\Throwable $e) {
                 app('log')->error($e);
@@ -63,9 +68,13 @@ class SonicEventSubscriber
     {
         if ($event->post->type === "comment") {
             try {
+                $content = SearchTextNormalizer::normalize(strip_tags($event->post->content));
+                if ($content === '') {
+                    return;
+                }
                 $this->ingest->connect($this->password);
                 //$this->ingest->pop('postCollection', 'flarumBucket', $event->post->id, strip_tags($event->post->content));
-                $this->ingest->push('postCollection', 'flarumBucket', $event->post->id, strip_tags($event->post->content), $this->locale);
+                $this->ingest->push('postCollection', 'flarumBucket', $event->post->id, $content, $this->locale);
                 $this->ingest->disconnect();
             } catch (\Throwable $e) {
                 app('log')->error($e);
@@ -76,8 +85,9 @@ class SonicEventSubscriber
     function hidden(Hidden $event) {
         if ($event->post->type === "comment") {
             try {
+                $content = SearchTextNormalizer::normalize(strip_tags($event->post->content));
                 $this->ingest->connect($this->password);
-                $this->ingest->pop('postCollection', 'flarumBucket', $event->post->id, strip_tags($event->post->content));
+                $this->ingest->pop('postCollection', 'flarumBucket', $event->post->id, $content);
                 $this->ingest->disconnect();
             } catch (\Throwable $e) {
                 app('log')->error($e);
@@ -88,8 +98,9 @@ class SonicEventSubscriber
     function deleted(Deleted $event) {
         if ($event->post->type === "comment") {
             try {
+                $content = SearchTextNormalizer::normalize(strip_tags($event->post->content));
                 $this->ingest->connect($this->password);
-                $this->ingest->pop('postCollection', 'flarumBucket', $event->post->id, strip_tags($event->post->content));
+                $this->ingest->pop('postCollection', 'flarumBucket', $event->post->id, $content);
                 $this->ingest->disconnect();
             } catch (\Throwable $e) {
                 app('log')->error($e);
@@ -100,8 +111,12 @@ class SonicEventSubscriber
     function restored(Restored $event) {
         if ($event->post->type === "comment") {
             try {
+                $content = SearchTextNormalizer::normalize(strip_tags($event->post->content));
+                if ($content === '') {
+                    return;
+                }
                 $this->ingest->connect($this->password);
-                $this->ingest->push('postCollection', 'flarumBucket', $event->post->id, strip_tags($event->post->content), $this->locale);
+                $this->ingest->push('postCollection', 'flarumBucket', $event->post->id, $content, $this->locale);
                 $this->ingest->disconnect();
             } catch (\Throwable $e) {
                 app('log')->error($e);

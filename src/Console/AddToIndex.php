@@ -6,6 +6,7 @@ use Illuminate\Contracts\Container\Container;
 use Flarum\Console\AbstractCommand;
 use Flarum\Post\Post;
 use Flarum\Settings\SettingsRepositoryInterface;
+use GaNuongLaChanh\Sonic\Support\SearchTextNormalizer;
 use Psonic\Ingest;
 use Psonic\Control;
 use Psonic\Client;
@@ -73,7 +74,7 @@ class AddToIndex extends AbstractCommand
         $progress->setFormat('verbose');
         foreach ($posts as $post) {
             $start = microtime(true);
-            $content = strip_tags($post->content);
+            $content = SearchTextNormalizer::normalize(strip_tags($post->content));
             if (trim($content) !== '') {
                 try {
                     $ingest->push('postCollection', 'flarumBucket', $post->id, $content, $locale);

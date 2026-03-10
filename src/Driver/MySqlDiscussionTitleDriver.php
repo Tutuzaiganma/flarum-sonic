@@ -5,6 +5,7 @@ use Flarum\Post\Post;
 use Flarum\Discussion\Discussion;
 use Illuminate\Contracts\Container\Container;
 use Flarum\Settings\SettingsRepositoryInterface;
+use GaNuongLaChanh\Sonic\Support\SearchTextNormalizer;
 class MySqlDiscussionTitleDriver
 {
     public function __construct(Container $container, SettingsRepositoryInterface $settings)
@@ -17,15 +18,34 @@ class MySqlDiscussionTitleDriver
      */
     public function match($string)
     {
+        $string = trim((string) $string);
+        if ($string === '') {
+            return [];
+        }
+
+        $normalizedString = SearchTextNormalizer::normalize($string);
+        $terms = SearchTextNormalizer::extractTerms($string);
         $relevantPostIds = [];
         // 1) Search in discussion title first
-        $discussionIds = Discussion::where("is_approved", 1)
+        $titleQuery = Discussion::where("is_approved", 1)
             ->where("is_private", 0)
             ->whereNull('hidden_at')
             ->where('comment_count', '>', 0)
-            ->where('title', 'like', '%' . $string . '%')
-            ->limit(20)
-            ->pluck('id','first_post_id');
+            ->where(function ($query) use ($string, $normalizedString, $terms) {
+                $query->where('title', 'like', '%' . $string . '%');
+                if ($normalizedString !== '' && $normalizedString !== $string) {
+                    $query->orWhere('title', 'like', '%' . $normalizedString . '%');
+                }
+                if (count($terms) > 0) {
+                    $query->orWhere(function ($termQuery) use ($terms) {
+                        foreach ($terms as $term) {
+                            $termQuery->where('title', 'like', '%' . $term . '%');
+                        }
+                    });
+                }
+            })
+            ->limit(20);
+        $discussionIds = $titleQuery->pluck('id','first_post_id');
 
         foreach ($discussionIds as $postId => $discussionId) {
             $relevantPostIds[$discussionId][] = $postId;
@@ -45,7 +65,17 @@ class MySqlDiscussionTitleDriver
         //echo $string .PHP_EOL;
         $search = new \Psonic\Search(new \Psonic\Client($host, $port, $timeout));
         $search->connect($password);
-        $res = $search->query('postCollection', 'flarumBucket', $string, 20, 0, $locale);
+        $searchTerms = array_values(array_unique(array_filter(array_merge([$string, $normalizedString], $terms), function ($term) {
+            return trim((string) $term) !== '';
+        })));
+        $res = [];
+        foreach (array_unique($searchTerms) as $term) {
+            $termResult = $search->query('postCollection', 'flarumBucket', $term, 20, 0, $locale);
+            if (is_array($termResult) && count($termResult) > 0) {
+                $res = array_merge($res, $termResult);
+            }
+        }
+        $res = array_values(array_unique($res));
         // you should be getting an array of object keys which matched with the term $string
         $search->disconnect();
         

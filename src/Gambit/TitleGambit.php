@@ -3,6 +3,7 @@ namespace GaNuongLaChanh\Sonic\Gambit;
 
 use Flarum\Search\SearchState;
 use GaNuongLaChanh\Sonic\Driver\MySqlDiscussionTitleDriver;
+use GaNuongLaChanh\Sonic\Support\SearchTextNormalizer;
 use Flarum\Search\GambitInterface;
 use Flarum\Post\Post;
 use Illuminate\Database\Query\Expression;
@@ -27,12 +28,17 @@ class TitleGambit implements GambitInterface
      */
     public function apply(SearchState $search, $bit)
     {
-        // Replace all non-word characters with spaces.
-        // We do this to prevent MySQL fulltext search boolean mode from taking
-        // effect: https://dev.mysql.com/doc/refman/5.7/en/fulltext-boolean.html
-        $bit = preg_replace('/[^\p{L}\p{N}_]+/u', ' ', $bit);
+        $bit = trim((string) $bit);
+        if ($bit === '') {
+            return $search;
+        }
 
-        if (! isset($bit) || strlen($bit)<=3) return $search;
+        // Keep the original query for symbol-attached terms (e.g. [WakuWaku]),
+        // while still using a normalized version in the driver as fallback.
+        $normalizedBit = SearchTextNormalizer::normalize($bit);
+        if ($normalizedBit === '') {
+            return $search;
+        }
 
         $query = $search->getQuery();
         $grammar = $query->getGrammar();
