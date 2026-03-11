@@ -8,10 +8,23 @@ use Flarum\Settings\SettingsRepositoryInterface;
 use GaNuongLaChanh\Sonic\Support\SearchTextNormalizer;
 class MySqlDiscussionTitleDriver
 {
+    /**
+     * @var int[]
+     */
+    protected array $orderedDiscussionIds = [];
+
     public function __construct(Container $container, SettingsRepositoryInterface $settings)
     {
         $this->container = $container;
         $this->settings = $settings;
+    }
+
+    /**
+     * @return int[]
+     */
+    public function getOrderedDiscussionIds(): array
+    {
+        return $this->orderedDiscussionIds;
     }
     /**
      * {@inheritdoc}
@@ -20,12 +33,14 @@ class MySqlDiscussionTitleDriver
     {
         $string = trim((string) $string);
         if ($string === '') {
+            $this->orderedDiscussionIds = [];
             return [];
         }
 
         $normalizedString = SearchTextNormalizer::normalize($string);
         $terms = SearchTextNormalizer::extractTerms($string);
         $relevantPostIds = [];
+        $discussionScores = [];
         // 1) Search in discussion title first
         $titleQuery = Discussion::where("is_approved", 1)
             ->where("is_private", 0)
@@ -49,6 +64,7 @@ class MySqlDiscussionTitleDriver
 
         foreach ($discussionIds as $postId => $discussionId) {
             $relevantPostIds[$discussionId][] = $postId;
+            $discussionScores[$discussionId] = ($discussionScores[$discussionId] ?? 0) + 100;
         }
         
         // 2) Then serch in post body by sonic
@@ -90,12 +106,19 @@ class MySqlDiscussionTitleDriver
             ->limit(20)
             ->pluck('discussion_id', 'id');
             foreach ($discussionIds as $postId => $discussionId) {
-                //echo $postId .PHP_EOL;
-                //echo $discussionId .PHP_EOL;
-                $relevantPostIds[$discussionId][] = $postId;
+                if (!isset($relevantPostIds[$discussionId])) {
+                    $relevantPostIds[$discussionId] = [];
+                }
+                if (!in_array($postId, $relevantPostIds[$discussionId], true)) {
+                    $relevantPostIds[$discussionId][] = $postId;
+                }
+                $discussionScores[$discussionId] = ($discussionScores[$discussionId] ?? 0) + 10;
             }
             
         }
+
+        arsort($discussionScores);
+        $this->orderedDiscussionIds = array_map('intval', array_keys($discussionScores));
 
         return $relevantPostIds;
     }

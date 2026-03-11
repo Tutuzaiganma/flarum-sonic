@@ -44,10 +44,20 @@ class TitleGambit implements GambitInterface
         $grammar = $query->getGrammar();
 
         $relevantPostIds = $this->titleGambit->match($bit);
-        $discussionIds = array_keys($relevantPostIds);
+        $discussionIds = $this->titleGambit->getOrderedDiscussionIds();
+        if (count($discussionIds) === 0) {
+            $discussionIds = array_map('intval', array_keys($relevantPostIds));
+        }
+        if (count($discussionIds) === 0) {
+            return $search;
+        }
+
         $postIdsArr = array_values($relevantPostIds);
         $postIds = array();
         array_walk_recursive($postIdsArr,function($v) use (&$postIds){ $postIds[] = $v; }); // flatten array
+        if (count($postIds) === 0) {
+            return $search;
+        }
         $subquery = Post::whereVisibleTo($search->getActor())
             ->select(['id as most_relevant_post_id','discussion_id'])
             ->whereIn('posts.id', $postIds);
@@ -65,7 +75,14 @@ class TitleGambit implements GambitInterface
 
 
         $search->getQuery()->whereIn('discussions.id', $discussionIds);
-        //$search->setDefaultSort(['id' => $discussionIds]);
-        $search->setDefaultSort(['discussions.id' => 'desc']);
+        $wrappedIdColumn = $grammar->wrap('discussions.id');
+        $orderCases = [];
+        foreach ($discussionIds as $index => $discussionId) {
+            $orderCases[] = "WHEN {$wrappedIdColumn} = ? THEN {$index}";
+        }
+        $query->orderByRaw(
+            'CASE ' . implode(' ', $orderCases) . ' ELSE ' . count($discussionIds) . ' END',
+            $discussionIds
+        );
     }
 }
